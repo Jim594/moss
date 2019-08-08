@@ -32,6 +32,12 @@ int main(int argc, char** argv){
     }
     int height = atoi(argv[3]);
     int width = atoi(argv[2]);
+    if (height < 3 || height > 100){
+        exit_with_error(2);
+    }
+    if (width < 3 || width > 100){
+        exit_with_error(2);
+    }
     int width_1 = width + 1; // the width must be 1 larger than width
     char*** board = calloc(height,sizeof(char**));
     for (int i = 0; i < height; ++i){
