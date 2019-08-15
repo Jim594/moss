@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <time.h>
 
 typedef struct {
         int x;
@@ -17,29 +19,33 @@ void exit_with_error(int errorNum);
 int read_deck(FILE* deckFile, int cardAmount, char** deck);
 void read_saved_card(Card* p1Cards, Card* p2Cards, char* p1, char* p2, int v);
 int initialize_game(char** deck, Card* p1Cards, Card* p2Cards, int n);
-void play_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, int n, int height, int width,int cardAmount, char* p1Type, char* p2Type);
-void play_load_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, int n, int v, int height, int width,int cardAmount, char* p1Type, char* p2Type);
+int play_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, int n, int height, int width, int cardAmount, char* p1Type, char* p2Type);
+int play_load_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, int n, int v, int height, int width, int cardAmount, char* p1Type, char* p2Type);
 void display_cards(Card* cards, int v, char* type);
 int first_move(int height, int width, Card* p1Cards, char*** board);
-void auto_first_move(int height, int width,Card* p1Cards, char*** board, int v);
-int move(int height, int width,int v, Card* p1Cards, Card* p2Cards, char*** board);
+void auto_first_move(int height, int width, Card* p1Cards, char*** board, int v);
+int move(int height, int width, int v, Card* p1Cards, Card* p2Cards, char*** board);
 void auto_move_1(int height, int width, char*** board, Card* p1Cards);
 void auto_move_2(int height, int width, char*** board, Card* p2Cards);
 int board_full(int height, int width, char*** board);
+void score(int height, int width, char*** board);
+int get_score(int i, int j, int xMax, int yMax, int height, int width, char*** board);
+int max(int d1, int d2, int d3, int d4);
 void delete_board(int height, int width_1, char*** board);
 void free_board(int height, int width_1, char*** board);
 void free_deck(char** deck, int cardAmount);
+void delay(int number);
 
 
-int main(int argc, char** argv){
-    if ((argc!=4) && (argc!=6)){
+int main(int argc, char** argv) {
+    if ((argc != 4) && (argc != 6)) {
         exit_with_error(1);
     }
     
-    if (argc == 4){
+    if (argc == 4) {
         char* p1Type = argv[2];
         char* p2Type = argv[3];
-        if (strcmp(p1Type,"h") && strcmp(p1Type,"a")){
+        if (strcmp(p1Type, "h") && strcmp(p1Type, "a")){
             exit_with_error(2);
         }
         if (strcmp(p2Type,"h") && strcmp(p2Type,"a")){
@@ -74,11 +80,12 @@ int main(int argc, char** argv){
             free(deckName);
             exit_with_error(3);
         }
-        char* N = calloc(81,sizeof(char));
-        fgets(N,81,deckFile); 
-        int cardAmount = atoi(N);
+        char* str = calloc(81,sizeof(char));
+        fgets(str,81,deckFile); 
+        int cardAmount = atoi(str);
         if (cardAmount < 1){
-            free(N);
+            free(deckName);
+            free(str);
             exit_with_error(3);
         }
         fgets(thirdLine,81,saveFile);
@@ -93,7 +100,8 @@ int main(int argc, char** argv){
         int error;
         error = load_saved_board(height,width,board,saveFile);
         if (error != 0){
-            free(N);
+            free(deckName);
+            free(str);
             free_board(height, width, board);
             exit_with_error(error);
         }        
@@ -106,8 +114,10 @@ int main(int argc, char** argv){
         error = read_deck(deckFile,cardAmount,deck);
         fclose(deckFile);
         if (error != 0){
-            free(N);
+            free(deckName);
+            free(str);
             free_deck(deck,cardAmount);
+            free_board(height, width, board);
             exit_with_error(error);
         }
         Card* p1Cards = calloc(6,sizeof(Card));
@@ -115,7 +125,23 @@ int main(int argc, char** argv){
         char* p1 = &thirdLine[0];
         char* p2 = &fourthLine[0];
         read_saved_card(p1Cards,p2Cards,p1,p2,v);
-        play_load_game(board,deck,p1Cards,p2Cards,n,v,height,width,cardAmount,p1Type,p2Type);
+        error = play_load_game(board,deck,p1Cards,p2Cards,n,v,height,width,cardAmount,p1Type,p2Type);
+        if (error != 0){
+            free(deckName);
+            free(str);
+            free_deck(deck,cardAmount);
+            free_board(height, width, board);
+            free(p1Cards);
+            free(p2Cards);
+            exit_with_error(error);
+        }
+        free(deckName);
+        free(str);
+        free_deck(deck,cardAmount);
+        free_board(height, width, board);
+        free(p1Cards);
+        free(p2Cards);
+        exit(0);
     }
 
     if (argc == 6){
@@ -140,11 +166,11 @@ int main(int argc, char** argv){
         if (deckFile == NULL){ //can not open deckfile
             exit_with_error(3);
         }
-        char* N = calloc(81,sizeof(char));
-        fgets(N,81,deckFile); 
-        int cardAmount = atoi(N);
+        char* str = calloc(81,sizeof(char));
+        fgets(str,81,deckFile); 
+        int cardAmount = atoi(str);
         if (cardAmount < 1){
-            free(N);
+            free(str);
             exit_with_error(3);
         }
         char** deck = calloc(cardAmount,sizeof(char*));
@@ -154,7 +180,7 @@ int main(int argc, char** argv){
         int error = read_deck(deckFile,cardAmount,deck);
         fclose(deckFile);
         if (error != 0){
-            free(N);
+            free(str);
             free_deck(deck,cardAmount);
             exit_with_error(error);
         }
@@ -172,11 +198,22 @@ int main(int argc, char** argv){
         int n = 0; //number of cards that have been drawn
         n = initialize_game(deck,p1Cards,p2Cards,n);
         display_board(height, width, board);
-        play_game(board,deck,p1Cards,p2Cards,n,height,width,cardAmount,p1Type,p2Type);
+        error = play_game(board,deck,p1Cards,p2Cards,n,height,width,cardAmount,p1Type,p2Type);
+        if(error != 0){
+            free(str);
+            free_deck(deck,cardAmount);
+            free(p1Cards);
+            free(p2Cards);
+            free_board(height,width,board);
+            exit_with_error(error);
+        }
+        free(str);
+        free_deck(deck,cardAmount);
         free(p1Cards);
         free(p2Cards);
         //delete_board(height, width, board);
-        free_board(height, width, board);
+        free_board(height,width,board);
+        exit(0);
     }
 }
 
@@ -323,7 +360,7 @@ int initialize_game(char** deck, Card* p1Cards, Card* p2Cards, int n){
     return n;
 }
 
-void play_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, int n, int height, int width,int cardAmount, char* p1Type, char* p2Type){
+int play_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, int n, int height, int width,int cardAmount, char* p1Type, char* p2Type){
     int v = 1; // indicating which player should have their turn now 
     int error; 
     p1Cards[5].num = (int)(deck[n][0]-'0');
@@ -333,7 +370,7 @@ void play_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, int n, 
     if (!strcmp(p1Type,"h")){
         error = first_move(height,width,p1Cards,board);
         if (error != 0){
-            exit_with_error(error);
+            return error;
         }  
     }else{
         auto_first_move(height,width,p1Cards,board,v);
@@ -353,7 +390,7 @@ void play_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, int n, 
                 if (!strcmp(p1Type,"h")){
                     error = move(height,width,v,p1Cards,p2Cards,board);
                     if (error != 0){
-                        exit_with_error(error);
+                        return error;
                     } 
                 }else{
                     auto_move_1(height,width,board,p1Cards); 
@@ -367,7 +404,7 @@ void play_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, int n, 
                 if (!strcmp(p2Type,"h")){
                     error = move(height,width,v,p1Cards,p2Cards,board);
                     if (error != 0){
-                    exit_with_error(error);
+                        return error;
                     } 
                 }else{
                     auto_move_2(height,width,board,p2Cards); 
@@ -378,9 +415,11 @@ void play_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, int n, 
         }
         display_board(height, width, board);
     }
+    score(height,width,board);
+    return 0;
 }
 
-void play_load_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, int n, int v, int height, int width,int cardAmount, char* p1Type, char* p2Type){
+int play_load_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, int n, int v, int height, int width,int cardAmount, char* p1Type, char* p2Type){
     int error;
     switch (v){
         case 1:
@@ -388,7 +427,7 @@ void play_load_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, in
             if (!strcmp(p1Type,"h")){
                 error = move(height,width,v,p1Cards,p2Cards,board);
                 if (error != 0){
-                    exit_with_error(error);
+                    return error;
                 }  
             }else{
                 auto_move_1(height,width,board,p1Cards);
@@ -399,7 +438,7 @@ void play_load_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, in
             if (!strcmp(p2Type,"h")){
                 error = move(height,width,v,p1Cards,p2Cards,board);
                 if (error != 0){
-                    exit_with_error(error);
+                    return error;
                 }  
             }else{
                 auto_move_2(height,width,board,p2Cards);
@@ -410,7 +449,7 @@ void play_load_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, in
     }
     display_board(height, width, board);
     
-    while (n < cardAmount){
+    while (n < cardAmount && !board_full(height,width,board)){
         v = v + 1;
         if (v > 2){
             v = v - 2;
@@ -424,7 +463,7 @@ void play_load_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, in
                 if (!strcmp(p1Type,"h")){
                     error = move(height,width,v,p1Cards,p2Cards,board);
                     if (error != 0){
-                        exit_with_error(error);
+                        return error;
                     } 
                 }else{
                     auto_move_1(height,width,board,p1Cards); 
@@ -438,7 +477,7 @@ void play_load_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, in
                 if (!strcmp(p2Type,"h")){
                     error = move(height,width,v,p1Cards,p2Cards,board);
                     if (error != 0){
-                    exit_with_error(error);
+                        return error;
                     } 
                 }else{
                     auto_move_2(height,width,board,p2Cards); 
@@ -449,6 +488,7 @@ void play_load_game(char*** board, char** deck, Card* p1Cards, Card* p2Cards, in
         }
         display_board(height, width, board);
     }
+    return 0;
 }
 void display_cards(Card* cards, int v, char* type){
     if (!strcmp(type,"h")){
@@ -530,6 +570,7 @@ void auto_first_move(int height, int width,Card* p1Cards, char*** board, int v){
         p1Cards[i].num = p1Cards[i+1].num;
         p1Cards[i].suit = p1Cards[i+1].suit;     
     }
+    delay(1);
 }
 
 int move(int height, int width,int v, Card* p1Cards, Card* p2Cards, char*** board){
@@ -698,6 +739,7 @@ void auto_move_1(int height, int width, char*** board, Card* p1Cards){
             }
         }
     }
+    delay(1);
 }
 
 void auto_move_2(int height, int width, char*** board, Card* p2Cards){
@@ -778,6 +820,7 @@ void auto_move_2(int height, int width, char*** board, Card* p2Cards){
             }
         }
     }
+    delay(1);
 }
 
 int board_full(int height, int width, char*** board){
@@ -790,6 +833,237 @@ int board_full(int height, int width, char*** board){
     }
     return 1;
 }
+void score(int height, int width, char*** board){
+    char suit;
+    int num;
+    int minimum = 10;
+    int maximum = 0;
+    int xMini, yMini;
+    int xMax, yMax;
+    int p1Score, p2Score;
+    for (int i = 0; i < height; i++){
+        for (int j = 0; j < width; j++){
+            suit = board[i][j][1];
+            num = board[i][j][0];
+            if (suit == 'A'){
+                if (num < minimum){
+                    minimum = num;
+                    xMini = i;
+                    yMini = j;
+                }
+            }
+        }
+    }
+    for (int i = 0; i < height; i++){
+        for (int j = 0; j < width; j++){
+            suit = board[i][j][1];
+            num = board[i][j][0];
+            if (suit == 'A'){
+                if (num > maximum){
+                    maximum = num;
+                    xMax = i;
+                    yMax = j;
+                }
+            }
+        }
+    }
+    int scoreA = get_score(xMini,yMini,xMax,yMax,height,width,board);
+    
+    for (int i = 0; i < height; i++){
+        for (int j = 0; j < width; j++){
+            suit = board[i][j][1];
+            num = board[i][j][0];
+            if (suit == 'B'){
+                if (num < minimum){
+                    minimum = num;
+                    xMini = i;
+                    yMini = j;
+                }
+            }
+        }
+    }
+    for (int i = 0; i < height; i++){
+        for (int j = 0; j < width; j++){
+            suit = board[i][j][1];
+            num = board[i][j][0];
+            if (suit == 'B'){
+                if (num > maximum){
+                    maximum = num;
+                    xMax = i;
+                    yMax = j;
+                }
+            }
+        }
+    }
+    int scoreB = get_score(xMini,yMini,xMax,yMax,height,width,board);
+
+    for (int i = 0; i < height; i++){
+        for (int j = 0; j < width; j++){
+            suit = board[i][j][1];
+            num = board[i][j][0];
+            if (suit == 'C'){
+                if (num < minimum){
+                    minimum = num;
+                    xMini = i;
+                    yMini = j;
+                }
+            }
+        }
+    }
+    for (int i = 0; i < height; i++){
+        for (int j = 0; j < width; j++){
+            suit = board[i][j][1];
+            num = board[i][j][0];
+            if (suit == 'C'){
+                if (num > maximum){
+                    maximum = num;
+                    xMax = i;
+                    yMax = j;
+                }
+            }
+        }
+    }
+    int scoreC = get_score(xMini,yMini,xMax,yMax,height,width,board);
+
+    for (int i = 0; i < height; i++){
+        for (int j = 0; j < width; j++){
+            suit = board[i][j][1];
+            num = board[i][j][0];
+            if (suit == 'D'){
+                if (num < minimum){
+                    minimum = num;
+                    xMini = i;
+                    yMini = j;
+                }
+            }
+        }
+    }
+    for (int i = 0; i < height; i++){
+        for (int j = 0; j < width; j++){
+            suit = board[i][j][1];
+            num = board[i][j][0];
+            if (suit == 'D'){
+                if (num > maximum){
+                    maximum = num;
+                    xMax = i;
+                    yMax = j;
+                }
+            }
+        }
+    }
+    int scoreD = get_score(xMini,yMini,xMax,yMax,height,width,board);
+    if (scoreA > scoreC){
+        p1Score = scoreA;
+    }else{
+        p1Score = scoreC;
+    }
+    if (scoreB > scoreD){
+        p2Score = scoreB;
+    }else{
+        p2Score = scoreD;
+    }
+    printf("Player 1=%d Player 2=%d",p1Score,p2Score);
+}
+
+int get_score(int i, int j,int xMax,int yMax, int height, int width, char*** board){
+    int num1, num2, num3, num4;
+    char suit1,suit2,suit3,suit4;
+    int x, y;
+    int x1, y1;
+    int num;
+    char suit;
+    int minimum = board[i][j][0];
+    int score = 1;
+    while (board[i][j][0] < board[xMax][yMax][0]){
+        num = board[i][j][0];
+        suit = board[i][j][1];
+        x = i-1;
+        y = j;
+        if (x < 0){
+            x = x + height;
+        }
+        num1 = board[x][y][0];
+        suit1 = board[x][y][1];
+        if (suit1 == suit && num1 > num){
+            i = x;
+            j = y;
+            score = score + 1;
+            continue;
+        }
+        if (num1 > minimum){
+            minimum = num1;
+            x1 = x;
+            y1 = y;
+        }
+            
+        x = i+1;
+        y = j;
+        if (x >= height){
+            x = x - height;
+        }
+        num2 = board[x][y][0];
+        suit2 = board[x][y][1];
+        if (suit2 == suit && num2 > num){
+            i = x;
+            j = y;
+            score = score + 1;
+            continue;
+        }
+        if (num2 < minimum && num2 > num){
+            minimum = num2;
+            x1 = x;
+            y1 = y;
+        }
+
+        x = i;
+        y = j-1;
+        if (y < 0){
+            y = y + width;
+        }
+        num3 = board[x][y][0];
+        suit3 = board[x][y][1];
+        if (suit3 == suit && num3 > num){
+            i = x;
+            j = y;
+            score = score + 1;
+            continue;
+        }
+        if (num3 < minimum && num3 > num){
+            minimum = num3;
+            x1 = x;
+            y1 = y;
+        }
+            
+        x = i;
+        y = j+1;
+        if (y >= width){
+            y = y - width;
+        }
+        num4 = board[x][y][0];
+        suit4 = board[x][y][1];
+        if (suit4 == suit && num4 > num){
+            i = x;
+            j = y;
+            score = score + 1;
+            continue;
+        }
+        if (num4 < minimum && num4 > num){
+            minimum = num4;
+            x1 = x;
+            y1 = y;
+        }
+        if (num >= max(num1,num2,num3,num4)){
+            break;
+        }
+        i = x1;
+        j = y1;
+        score = score + 1;
+    }
+    //printf("%d %d\n",num,minimum);
+    //printf("%d\n",score);
+    return score;
+}
+
 void exit_with_error(int errorNum){
     switch (errorNum){
         case 1:
@@ -847,4 +1121,26 @@ void free_deck(char** deck, int cardAmount){
         free(deck[i]);
     }
     free(deck);
+}
+
+int max(int d1, int d2, int d3, int d4){
+    int maximum = d1;
+    if (d2 > maximum){
+        maximum = d2;
+    }
+    if (d3 > maximum){
+        maximum = d3;
+    }
+    if (d4 > maximum){
+        maximum = d4;
+    }
+    return maximum;
+}
+
+void delay(int number){
+    int startTime = time(NULL);
+    
+    while(time(NULL) < startTime + number){
+        ;
+    }
 }
